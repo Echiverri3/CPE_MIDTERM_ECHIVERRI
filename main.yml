@@ -1,39 +1,50 @@
-- name: Making directory for prometheus (Ubuntu)
-  file:
-    path: ~/prometheus
-    state: directory
 
-- name: Download and Extract Prometheus (Ubuntu)
-  unarchive:
-    src: https://github.com/prometheus/prometheus/releases/download/v2.43.0/prometheus-2.43.0.linux-amd64.tar.gz
-    dest: ~/prometheus
-    remote_src: yes
-    mode: 0755
-    owner: root
-    group: root
+- name: Downloading and installing public signing key.
+  rpm_key:
+    state: present
+    key: "{{ gpg_key_kibana }}"
 
-- name: Executables(Ubuntu)
-  shell: |
-    cd ~/prometheus/prometheus*
-    cp -r . /usr/local/bin/prometheus
-
-- name: Setup Service File(Ubuntu)
+- name: Adding kibana to the RPM repository.
   copy:
-    src: prometheus.service
-    dest: /etc/systemd/system/
-    mode: 0755
+    src: kibana.repo
+    dest: /etc/yum.repos.d/kibana.repo
     owner: root
     group: root
+    mode: 777
 
-- name: Stopping current service
-  tags: serviceon
+- name: Updating the repository once again.
+  yum:
+    name:
+      - kibana
+    state: latest
+
+- name: Cofiguring server.port.
+  replace:
+    path: /etc/kibana/kibana.yml
+    regexp: '#server.port: 5601'
+    replace: 'server.port: 5601'
+
+- name: Cofiguring server.host.
+  replace:
+    path: /etc/kibana/kibana.yml
+    regexp: '#server.host: "localhost"'
+    replace: 'server.host: "0.0.0.0"'
+
+- name: Cofiguring elasticsearch.hosts.
+  replace:
+    path: /etc/kibana/kibana.yml
+    regexp: '#elasticsearch.hosts: ["http://localhost:9200"]'
+    replace: '"elasticsearch.hosts: ["http://localhost:9200"]"'
+
+- name: Opening port for elastic search.
+  firewalld:
+    port: 5601/tcp
+    zone: public
+    permanent: yes
+    state: enabled
+
+- name: Making sure that Kibana is started and enabled.
   service:
-    name: prometheus
-    state: stopped
-
-- name: starting and enabling prometheus (Ubuntu)
-  systemd:
-    name: prometheus
-    state: started
-    daemon_reload: true
+    name: kibana
+    state: restarted
     enabled: true
